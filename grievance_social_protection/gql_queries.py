@@ -1,3 +1,4 @@
+from core.utils import filter_validity
 import graphene
 from graphene import ObjectType
 from graphene_django import DjangoObjectType
@@ -7,7 +8,7 @@ from django.utils.translation import gettext as _
 
 from core.gql_queries import UserGQLType
 from .apps import TicketConfig
-from .models import Ticket, Comment
+from .models import Ticket, Comment, TicketAttachment, TicketAttachmentType
 
 from core import prefix_filterset, ExtendedConnection
 from .util import model_obj_to_json
@@ -36,6 +37,8 @@ class TicketGQLType(DjangoObjectType):
     reporter_first_name = graphene.String()
     reporter_last_name = graphene.String()
     reporter_dob = graphene.String()
+    
+    attachments_count = graphene.Int()
 
     @staticmethod
     def resolve_reporter_type(root, info):
@@ -104,6 +107,11 @@ class TicketGQLType(DjangoObjectType):
                     elif root.reporter_type.name == 'user':
                         return None
         return None
+        
+    def resolve_attachments_count(self, info):
+        if not info.context.user.has_perms(TicketConfig.gql_query_tickets_perms):
+            raise PermissionDenied(_("unauthorized"))
+        return self.attachments.filter(legacy_id__isnull=True).filter(validity_to__isnull=True).count()
 
     class Meta:
         model = Ticket
@@ -222,23 +230,38 @@ class CommentGQLType(DjangoObjectType):
         connection_class = ExtendedConnection
 
 
-# class TicketAttachmentGQLType(DjangoObjectType):
-#     class Meta:
-#         model = TicketAttachment
-#         interfaces = (graphene.relay.Node,)
-#         filter_fields = {
-#             "id": ["exact"],
-#             "filename": ["exact", "icontains"],
-#             "mime_type": ["exact", "icontains"],
-#             "url": ["exact", "icontains"],
-#             **prefix_filterset("ticket__", TicketGQLType._meta.filter_fields),
-#         }
-#         connection_class = ExtendedConnection
-#
-#     @classmethod
-#     def get_queryset(cls, queryset, info):
-#         queryset = queryset.filter(*filter_validity())
-#         return queryset
+class TicketAttachmentGQLType(DjangoObjectType):
+    class Meta:
+        model = TicketAttachment
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "type": ["exact", "icontains"],
+            "title": ["exact", "icontains"],
+            "date": ["exact", "lt", "lte", "gt", "gte"],
+            "filename": ["exact", "icontains"],
+            "mime": ["exact", "icontains"],
+            "general_type": ["exact", "icontains"],
+            "url": ["exact", "icontains"],
+            **prefix_filterset("ticket__", TicketGQLType._meta.filter_fields),
+        }
+        connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        queryset = queryset.filter(*filter_validity())
+        return queryset
+
+
+class TicketAttachmentTypeGQLType(DjangoObjectType):
+    class Meta:
+        model = TicketAttachmentType
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "ticket_general_type": ["exact"]
+        }
+        connection_class = ExtendedConnection
 
 
 class AttendingStaffRoleGQLType(ObjectType):

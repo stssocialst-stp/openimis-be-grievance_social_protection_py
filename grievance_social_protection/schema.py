@@ -5,6 +5,7 @@ from core.schema import OrderedDjangoFilterConnectionField
 from core.schema import signal_mutation_module_validate
 from django.db.models import Q
 import graphene_django_optimizer as gql_optimizer
+from graphene_django.filter import DjangoFilterConnectionField
 
 from core.utils import append_validity_filter
 from .apps import MODULE_NAME
@@ -28,11 +29,16 @@ class Query(graphene.ObjectType):
         TicketGQLType,
         str=graphene.String(),
     )
-    # ticket_attachments = DjangoFilterConnectionField(TicketAttachmentGQLType)
+    
+    ticket_attachment_type = DjangoFilterConnectionField(
+        TicketAttachmentTypeGQLType
+    )
+    
+    ticket_attachments = DjangoFilterConnectionField(TicketAttachmentGQLType)
 
     ticket_details = OrderedDjangoFilterConnectionField(
         TicketGQLType,
-        # showHistory=graphene.Boolean(),
+        showHistory=graphene.Boolean(),
         orderBy=graphene.List(of_type=graphene.String),
     )
 
@@ -108,10 +114,26 @@ class Query(graphene.ObjectType):
 
         return gql_optimizer.query(Ticket.objects.filter(*filters).all(), info)
 
-    # def resolve_claim_attachments(self, info, **kwargs):
-    #     if not info.context.user.has_perms(TicketConfig.gql_query_tickets_perms):
-    #         raise PermissionDenied(_("unauthorized"))
+    def resolve_ticket_attachments(self, info, **kwargs):
+        """
+        Resolves ticket attachments for a specific ticket.
+        """
+        user = info.context.user
 
+        # Check if the user has the required permissions
+        if not user.has_perms(TicketConfig.gql_query_tickets_perms):
+            raise PermissionDenied(_("unauthorized"))
+
+        # Extract ticket ID from the arguments
+        ticket_id = kwargs.get("ticket_id", None)
+        if not ticket_id:
+            raise ValueError(_("Ticket ID is required to fetch attachments."))
+
+        # Query attachments for the specified ticket
+        return gql_optimizer.query(
+            TicketAttachment.objects.filter(ticket_id=ticket_id).all(),
+            info
+        )
 
     def resolve_grievance_config(self, info, **kwargs):
         user = info.context.user
@@ -132,8 +154,9 @@ class Mutation(graphene.ObjectType):
     resolve_grievance_by_comment = ResolveGrievanceByCommentMutation.Field()
     reopen_ticket = ReopenTicketMutation.Field()
 
-    # create_ticket_attachment = CreateTicketAttachmentMutation.Field()
-    # update_ticket_attachment = UpdateTicketAttachmentMutation.Field()
+    create_ticket_attachment = CreateTicketAttachmentMutation.Field()
+    update_ticket_attachment = UpdateTicketAttachmentMutation.Field()
+    delete_ticket_attachment = DeleteTicketAttachmentMutation.Field()
 
 
 def on_bank_mutation(kwargs, k='uuid'):
@@ -155,13 +178,13 @@ def on_bank_mutation(kwargs, k='uuid'):
 def on_ticket_mutation(**kwargs):
     uuids = kwargs["data"].get("uuids", [])
     if not uuids:
-        uuid = kwargs["data"].get("claim_uuid", None)
+        uuid = kwargs["data"].get("ticket_uuid", None)
         uuids = [uuid] if uuid else []
     if not uuids:
         return []
     impacted_tickets = Ticket.objects.filter(uuid__in=uuids).all()
     for ticket in impacted_tickets:
-        TicketMutation.objects.create(Ticket=ticket, mutation_id=kwargs["mutation_log_id"])
+        TicketMutation.objects.create(ticket=ticket, mutation_id=kwargs["mutation_log_id"])
     return []
 
 

@@ -1,4 +1,5 @@
 import logging
+import os
 
 from django.apps import AppConfig
 
@@ -19,7 +20,7 @@ DEFAULT_CFG = {
     "gql_mutation_delete_tickets_perms": ["127003"],
     "gql_mutation_create_comment_perms": ["127005"],
     "gql_mutation_resolve_grievance_perms": ["127006"],
-    "tickets_attachments_root_path": None,
+    "tickets_attachments_root_path": os.path.abspath("./images/tickets/attachments"),
 
     "grievance_types": [DEFAULT_STRING, 'Category A', 'Category B'],
     "grievance_flags": [DEFAULT_STRING, 'Flag A', 'Flag B'],
