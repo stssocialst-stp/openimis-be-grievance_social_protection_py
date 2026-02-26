@@ -1,3 +1,4 @@
+from core.utils import filter_validity
 import graphene
 from graphene import ObjectType
 from graphene_django import DjangoObjectType
@@ -7,7 +8,10 @@ from django.utils.translation import gettext as _
 
 from core.gql_queries import UserGQLType
 from .apps import TicketConfig
-from .models import Ticket, Comment
+from .models import (
+    Ticket, Comment, TicketAttachment, TicketAttachmentType,
+    TicketCategory, TicketChannel, TicketFlag, TicketPriority,
+)
 
 from core import prefix_filterset, ExtendedConnection
 from .util import model_obj_to_json
@@ -17,6 +21,79 @@ from .validations import user_associated_with_ticket
 def check_ticket_perms(info):
     if not info.context.user.has_perms(TicketConfig.gql_query_tickets_perms):
         raise PermissionDenied(_("unauthorized"))
+
+
+# =============================================================================
+# Lookup table GQL types
+# =============================================================================
+
+class TicketCategoryGQLType(DjangoObjectType):
+    class Meta:
+        model = TicketCategory
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "codigo": ["exact", "icontains"],
+            "nome": ["exact", "icontains"],
+            "ativo": ["exact"],
+        }
+        connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        return queryset.filter(*filter_validity())
+
+
+class TicketChannelGQLType(DjangoObjectType):
+    class Meta:
+        model = TicketChannel
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "codigo": ["exact", "icontains"],
+            "nome": ["exact", "icontains"],
+            "ativo": ["exact"],
+        }
+        connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        return queryset.filter(*filter_validity())
+
+
+class TicketFlagGQLType(DjangoObjectType):
+    class Meta:
+        model = TicketFlag
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "codigo": ["exact", "icontains"],
+            "nome": ["exact", "icontains"],
+            "ativo": ["exact"],
+        }
+        connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        return queryset.filter(*filter_validity())
+
+
+class TicketPriorityGQLType(DjangoObjectType):
+    class Meta:
+        model = TicketPriority
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "codigo": ["exact", "icontains"],
+            "nome": ["exact", "icontains"],
+            "ordem": ["exact", "lt", "lte", "gt", "gte"],
+            "ativo": ["exact"],
+        }
+        connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        return queryset.filter(*filter_validity())
 
 
 def check_comment_perms(info):
@@ -36,6 +113,13 @@ class TicketGQLType(DjangoObjectType):
     reporter_first_name = graphene.String()
     reporter_last_name = graphene.String()
     reporter_dob = graphene.String()
+
+    attachments_count = graphene.Int()
+
+    category = graphene.Field(TicketCategoryGQLType)
+    channel = graphene.Field(TicketChannelGQLType)
+    flags = graphene.Field(TicketFlagGQLType)
+    priority = graphene.Field(TicketPriorityGQLType)
 
     @staticmethod
     def resolve_reporter_type(root, info):
@@ -104,6 +188,11 @@ class TicketGQLType(DjangoObjectType):
                     elif root.reporter_type.name == 'user':
                         return None
         return None
+        
+    def resolve_attachments_count(self, info):
+        if not info.context.user.has_perms(TicketConfig.gql_query_tickets_perms):
+            raise PermissionDenied(_("unauthorized"))
+        return self.attachments.filter(legacy_id__isnull=True).filter(validity_to__isnull=True).count()
 
     class Meta:
         model = Ticket
@@ -116,11 +205,11 @@ class TicketGQLType(DjangoObjectType):
             "title": ["exact", "istartswith", "icontains", "iexact"],
             "description": ["exact", "istartswith", "icontains", "iexact"],
             "status": ["exact", "istartswith", "icontains", "iexact"],
-            "priority": ["exact", "istartswith", "icontains", "iexact"],
-            "category": ["exact", "istartswith", "icontains", "iexact"],
-            "flags": ["exact", "istartswith", "icontains", "iexact"],
-            "channel": ["exact", "istartswith", "icontains", "iexact"],
             "resolution": ["exact", "istartswith", "icontains", "iexact"],
+            "category_id": ["exact"],
+            "flags_id": ["exact"],
+            "channel_id": ["exact"],
+            "priority_id": ["exact"],
             'reporter_id': ["exact"],
             "due_date": ["exact", "istartswith", "icontains", "iexact"],
             "date_of_incident": ["exact", "istartswith", "icontains", "iexact"],
@@ -222,23 +311,38 @@ class CommentGQLType(DjangoObjectType):
         connection_class = ExtendedConnection
 
 
-# class TicketAttachmentGQLType(DjangoObjectType):
-#     class Meta:
-#         model = TicketAttachment
-#         interfaces = (graphene.relay.Node,)
-#         filter_fields = {
-#             "id": ["exact"],
-#             "filename": ["exact", "icontains"],
-#             "mime_type": ["exact", "icontains"],
-#             "url": ["exact", "icontains"],
-#             **prefix_filterset("ticket__", TicketGQLType._meta.filter_fields),
-#         }
-#         connection_class = ExtendedConnection
-#
-#     @classmethod
-#     def get_queryset(cls, queryset, info):
-#         queryset = queryset.filter(*filter_validity())
-#         return queryset
+class TicketAttachmentGQLType(DjangoObjectType):
+    class Meta:
+        model = TicketAttachment
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "type": ["exact", "icontains"],
+            "title": ["exact", "icontains"],
+            "date": ["exact", "lt", "lte", "gt", "gte"],
+            "filename": ["exact", "icontains"],
+            "mime": ["exact", "icontains"],
+            "general_type": ["exact", "icontains"],
+            "url": ["exact", "icontains"],
+            **prefix_filterset("ticket__", TicketGQLType._meta.filter_fields),
+        }
+        connection_class = ExtendedConnection
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        queryset = queryset.filter(*filter_validity())
+        return queryset
+
+
+class TicketAttachmentTypeGQLType(DjangoObjectType):
+    class Meta:
+        model = TicketAttachmentType
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "id": ["exact"],
+            "ticket_general_type": ["exact"]
+        }
+        connection_class = ExtendedConnection
 
 
 class AttendingStaffRoleGQLType(ObjectType):
@@ -252,20 +356,20 @@ class ResolutionTimesByCategoryGQLType(ObjectType):
 
 
 class GrievanceTypeConfigurationGQLType(ObjectType):
-    grievance_types = graphene.List(graphene.String)
-    grievance_flags = graphene.List(graphene.String)
-    grievance_channels = graphene.List(graphene.String)
+    grievance_types = graphene.List(TicketCategoryGQLType)
+    grievance_flags = graphene.List(TicketFlagGQLType)
+    grievance_channels = graphene.List(TicketChannelGQLType)
     grievance_category_staff_roles = graphene.List(AttendingStaffRoleGQLType)
     grievance_default_resolutions_by_category = graphene.List(ResolutionTimesByCategoryGQLType)
 
     def resolve_grievance_types(self, info):
-        return TicketConfig.grievance_types
+        return TicketCategory.objects.filter(ativo=True, validity_to__isnull=True)
 
     def resolve_grievance_flags(self, info):
-        return TicketConfig.grievance_flags
+        return TicketFlag.objects.filter(ativo=True, validity_to__isnull=True)
 
     def resolve_grievance_channels(self, info):
-        return TicketConfig.grievance_channels
+        return TicketChannel.objects.filter(ativo=True, validity_to__isnull=True)
 
     def resolve_grievance_category_staff_roles(self, info):
         category_staff_role_list = []

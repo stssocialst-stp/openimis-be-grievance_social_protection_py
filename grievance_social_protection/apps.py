@@ -1,4 +1,5 @@
 import logging
+import os
 
 from django.apps import AppConfig
 
@@ -19,16 +20,13 @@ DEFAULT_CFG = {
     "gql_mutation_delete_tickets_perms": ["127003"],
     "gql_mutation_create_comment_perms": ["127005"],
     "gql_mutation_resolve_grievance_perms": ["127006"],
-    "tickets_attachments_root_path": None,
+    "tickets_attachments_root_path": os.path.abspath("./images/tickets/attachments"),
 
-    "grievance_types": [DEFAULT_STRING, 'Category A', 'Category B'],
-    "grievance_flags": [DEFAULT_STRING, 'Flag A', 'Flag B'],
-    "grievance_channels": [DEFAULT_STRING, 'Channel A', 'Channel B'],
     "default_responses": {DEFAULT_STRING: DEFAULT_STRING},
     "grievance_anonymized_fields": {DEFAULT_STRING: []},
     # CRON timedelta: {days},{hours}
     "resolution_times": DEFAULT_TIME_RESOLUTION,
-    "default_resolution": {DEFAULT_STRING: DEFAULT_TIME_RESOLUTION, 'Category A': '4,0', 'Category B': '6,12'},
+    "default_resolution": {DEFAULT_STRING: DEFAULT_TIME_RESOLUTION},
 
     "attending_staff_role_ids": [],
     "default_attending_staff_role_ids": {DEFAULT_STRING: [1, 2]},
@@ -47,9 +45,6 @@ class TicketConfig(AppConfig):
     gql_mutation_create_comment_perms = []
     tickets_attachments_root_path = None
 
-    grievance_types = []
-    grievance_flags = []
-    grievance_channels = []
     default_responses = {}
     grievance_anonymized_fields = {}
     resolution_times = {}
@@ -60,34 +55,8 @@ class TicketConfig(AppConfig):
     def ready(self):
         from core.models import ModuleConfiguration
         cfg = ModuleConfiguration.get_or_default(MODULE_NAME, DEFAULT_CFG)
-        self.__validate_grievance_dict_fields(cfg, 'default_responses')
-        self.__validate_grievance_dict_fields(cfg, 'grievance_anonymized_fields')
-        self.__validate_grievance_dict_fields(cfg, 'default_resolution')
         self.__validate_grievance_default_resolution_time(cfg)
         self.__load_config(cfg)
-
-    @classmethod
-    def __validate_grievance_dict_fields(cls, cfg, field_name):
-        def get_grievance_type_options_msg(types):
-            types_string = ", ".join(types)
-            return logger.info(f'Available grievance types: {types_string}')
-
-        dict_field = cfg.get(field_name, {})
-        if not dict_field:
-            return
-
-        grievance_types = cfg.get('grievance_types', [])
-        if not grievance_types:
-            logger.warning('Please specify grievance_types if you want to setup %s.', field_name)
-
-        if not isinstance(dict_field, dict):
-            get_grievance_type_options_msg(grievance_types)
-            return
-
-        for field_key in dict_field.keys():
-            if field_key not in grievance_types:
-                logger.warning('%s in %s not in grievance_types', field_key, field_name)
-                get_grievance_type_options_msg(grievance_types)
 
     @classmethod
     def __validate_grievance_default_resolution_time(cls, cfg):
@@ -110,10 +79,8 @@ class TicketConfig(AppConfig):
                                    "representing days and hours, separated by a comma.")
                 else:
                     parts = value.split(',')
-                    # Parse days and hours
                     days = int(parts[0])
                     hours = int(parts[1])
-                    # Validate days and hours
                     if 0 <= days < 99 and 0 <= hours < 24:
                         logger.info(f"Days: {days}, Hours: {hours}")
                     else:
