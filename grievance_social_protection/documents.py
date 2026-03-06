@@ -39,7 +39,15 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
             model = Ticket
             fields = [
                 'id', 'key', 'title', 'code',
-                'description', 'status', 'category', 'flags',
-                'channel', 'resolution'
+                'description', 'status', 'resolution'
             ]
             queryset_pagination = 5000
+ 
+        def prepare_category(self, instance):
+            return instance.category.nome if instance.category else None
+
+        def prepare_flags(self, instance):
+            return instance.flags.nome if instance.flags else None
+
+        def prepare_channel(self, instance):
+            return instance.channel.nome if instance.channel else None
