@@ -42,7 +42,7 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
                 'description', 'status', 'resolution'
             ]
             queryset_pagination = 5000
-
+ 
         def prepare_category(self, instance):
             return instance.category.nome if instance.category else None
 
