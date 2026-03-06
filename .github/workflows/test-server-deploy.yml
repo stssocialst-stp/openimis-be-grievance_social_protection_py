@@ -2,7 +2,7 @@ name: Dispatched Workflow
 on:
   push:
     branches:
-      - develop
+      - stp-changes
 
 jobs:
   rebuild-test-server:
@@ -29,4 +29,3 @@ jobs:
             cd coreMIS/
             docker-compose build backend gateway && docker-compose up -d
           EOF
-          
